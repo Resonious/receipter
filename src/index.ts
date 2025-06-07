@@ -160,6 +160,8 @@ async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
   const ratesURL = new URL(baseURL);
   ratesURL.pathname = `${basePath}/Exchange Rate`;
   ratesURL.searchParams.append("maxRecords", "30");
+  ratesURL.searchParams.append("sort[0][field]", "Date");
+  ratesURL.searchParams.append("sort[0][direction]", "desc");
   const ratesRaw = await fetch(ratesURL, { method: "GET", headers: { authorization } }).then((x) => x.json());
   const rates = ExchangeRates.parse(ratesRaw);
   const rate = rates.records.find((x) => x.fields.Date === receipt.dateYYYYMMDD);
