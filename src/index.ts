@@ -7,22 +7,19 @@ import { EmailMessage } from "cloudflare:email";
 
 const Classification = z.object({
   isReceipt: z.boolean(),
-  notes: z.optional(z.string()),
-  receipt: z.optional(
-    z.object({
-      date: z.string(),
-      description: z.string(),
-      totalAmount: z.string(),
-      currency: z.string(),
-      lineItems: z.array(
-        z.object({
-          amount: z.string(),
-          quantity: z.optional(z.number()),
-          description: z.optional(z.string()),
-        })
-      ),
-    })
-  ),
+  receipt: z.object({
+    date: z.string(),
+    nameOfCompany: z.string(),
+    totalAmount: z.string(),
+    currency: z.string(),
+    lineItems: z.array(
+      z.object({
+        amount: z.string(),
+        quantity: z.number(),
+        nameOfProduct: z.string(),
+      })
+    ),
+  }),
 });
 
 export default {
@@ -85,8 +82,9 @@ export default {
       console.error("Empty openai response. TODO: use workflow to retry?");
       return;
     }
+    console.log(result);
     if (!result.isReceipt) {
-      console.warn("Not a receit. Carry on.");
+      console.warn("Not a receipt. Carry on.");
       return;
     }
     if (!result.receipt) {
@@ -105,9 +103,9 @@ export default {
 
     const r = result.receipt;
     const lines: string[] = [
-      `Receipt for: ${r.description} (${r.date})`,
+      `Receipt for: ${r.nameOfCompany} (${r.date})`,
       `Total: ${r.totalAmount} ${r.currency}`,
-      ...r.lineItems.map(item => `${item.description}: ${item.amount} x${item.quantity ?? 1}`),
+      ...r.lineItems.map((item) => `${item.nameOfProduct}: ${item.amount} x${item.quantity}`),
     ];
 
     reply.addMessage({
