@@ -11,14 +11,9 @@ const Classification = z.object({
     dateYYYYMMDD: z.string(),
     nameOfCompany: z.string(),
     totalAmount: z.string(),
-    currency: z.string(),
+    currency: z.enum(["USD", "JPY", "unknown"]),
     invoiceOrReceiptFilename: z.string(),
-    category: z.enum([
-      "Travel",
-      "Equipment",
-      "Services",
-      "SAAS",
-    ]),
+    category: z.enum(["Travel", "Equipment", "Services", "SAAS"]),
     lineItems: z.array(
       z.object({
         amount: z.string(),
@@ -27,6 +22,19 @@ const Classification = z.object({
       })
     ),
   }),
+});
+type ReceiptResult = z.output<typeof Classification>;
+
+const ExchangeRates = z.object({
+  records: z.array(
+    z.object({
+      id: z.string(),
+      fields: z.object({
+        Date: z.string(),
+        "JPY per USD": z.number(),
+      }),
+    })
+  ),
 });
 
 export default {
@@ -99,12 +107,17 @@ export default {
       return;
     }
 
+    const airtableResult = await addToAirtable(result, env).catch((e) => {
+      console.error(e);
+      return { error: e.toString() };
+    });
+
     const reply = createMimeMessage();
     const messageId = message.headers.get("Message-ID");
     if (messageId) {
       reply.setHeader("In-Reply-To", messageId);
     }
-    const sender = { name: "Receipter", addr: "receipts@snd.one" };
+    const sender = { name: "Receipter", addr: env.EMAIL_ADDRESS };
     reply.setSender(sender);
     reply.setSubject(`Re: ${email.subject ?? "recent email"}`);
 
@@ -113,6 +126,7 @@ export default {
       `Receipt for: ${r.nameOfCompany} (${r.dateYYYYMMDD})`,
       `Total: ${r.totalAmount} ${r.currency}`,
       ...r.lineItems.map((item) => `${item.nameOfProduct}: ${item.amount} x${item.quantity}`),
+      `Airtable result: ${JSON.stringify(airtableResult)}`,
     ];
 
     reply.addMessage({
@@ -123,3 +137,68 @@ export default {
     await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
   },
 } satisfies ExportedHandler<Env>;
+
+type Result =
+  | {
+      error: string;
+    }
+  | {
+      recordID: string;
+    };
+
+async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
+  const baseURL = "https://api.airtable.com";
+  const basePath = env.AIRTABLE_BASE_PATH;
+  const { receipt } = result;
+  const authorization = `Bearer ${env.AIRTABLE_API_KEY}`;
+
+  if (receipt.currency === "unknown") {
+    return { error: "unknown currency" };
+  }
+
+  // fetch exchange rate for date
+  const ratesURL = new URL(baseURL);
+  ratesURL.pathname = `${basePath}/Exchange Rate`;
+  ratesURL.searchParams.append("maxRecords", "30");
+  const ratesRaw = await fetch(ratesURL, { method: "GET", headers: { authorization } }).then((x) => x.json());
+  const rates = ExchangeRates.parse(ratesRaw);
+  const rate = rates.records.find((x) => x.fields.Date === receipt.dateYYYYMMDD);
+  if (!rate) {
+    return { error: `No rate found for ${receipt.dateYYYYMMDD}` };
+  }
+
+  // create entry
+  // https://airtable.com/appUQFzJEsSST1Nkt/api/docs#curl/table:receipt%20log:create
+  const createRequest = {
+    records: [
+      {
+        fields: {
+          "Short Description": receipt.nameOfCompany,
+          Date: [rate.id],
+          [receipt.currency]: receipt.totalAmount,
+          Category: receipt.category,
+	  Notes: receipt.lineItems.map(i => i.nameOfProduct).join("\n"),
+        },
+      },
+    ],
+  };
+  const receiptsURL = new URL(baseURL);
+  receiptsURL.pathname = `${basePath}/Receipt Log`;
+  const receiptsResponse = await fetch(receiptsURL, {
+    method: "POST",
+    headers: {
+      authorization,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createRequest),
+  });
+  if (receiptsResponse.status !== 200) {
+    const body = await receiptsResponse.text();
+    console.error(receiptsResponse.status, body);
+    return { error: "failed to create expense tracking entry" };
+  }
+
+  const body = (await receiptsResponse.json()) as any;
+
+  return { recordID: body.records[0].id };
+}
