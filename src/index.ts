@@ -177,7 +177,7 @@ async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
         fields: {
           "Short Description": receipt.nameOfCompany,
           Date: [rate.id],
-          [receipt.currency]: receipt.totalAmount,
+          [receipt.currency]: receipt.totalAmount.replace(/[^0-9.]/g, ''),
           Category: receipt.category,
 	  Notes: receipt.lineItems.map(i => i.nameOfProduct).join("\n"),
         },
