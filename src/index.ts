@@ -8,10 +8,17 @@ import { EmailMessage } from "cloudflare:email";
 const Classification = z.object({
   isReceipt: z.boolean(),
   receipt: z.object({
-    date: z.string(),
+    dateYYYYMMDD: z.string(),
     nameOfCompany: z.string(),
     totalAmount: z.string(),
     currency: z.string(),
+    invoiceOrReceiptFilename: z.string(),
+    category: z.enum([
+      "Travel",
+      "Equipment",
+      "Services",
+      "SAAS",
+    ]),
     lineItems: z.array(
       z.object({
         amount: z.string(),
@@ -103,7 +110,7 @@ export default {
 
     const r = result.receipt;
     const lines: string[] = [
-      `Receipt for: ${r.nameOfCompany} (${r.date})`,
+      `Receipt for: ${r.nameOfCompany} (${r.dateYYYYMMDD})`,
       `Total: ${r.totalAmount} ${r.currency}`,
       ...r.lineItems.map((item) => `${item.nameOfProduct}: ${item.amount} x${item.quantity}`),
     ];
