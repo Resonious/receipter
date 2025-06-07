@@ -43,6 +43,8 @@ export default {
   },
 
   async email(message, env, _ctx) {
+    const id = `${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
+
     const openai = new OpenAI({
       apiKey: env.OPENAI_API_KEY,
     });
@@ -57,9 +59,13 @@ export default {
       return;
     }
 
+    const attachmentUploads = [];
+
     const attachments: Array<{ type: "input_file"; filename: string; file_data: string }> = [];
     for (const attachment of email.attachments) {
       const data = `data:${attachment.mimeType};base64,${attachment.content}`;
+
+      attachmentUploads.push(env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, attachment.content));
 
       attachments.push({
         type: "input_file",
@@ -107,7 +113,7 @@ export default {
       return;
     }
 
-    const airtableResult = await addToAirtable(result, env).catch((e) => {
+    const airtableResult = await addToAirtable(result, id, env).catch((e) => {
       console.error(e);
       return { error: e.toString() };
     });
@@ -135,6 +141,7 @@ export default {
     });
 
     await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
+    await Promise.all(attachmentUploads);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -146,7 +153,7 @@ type Result =
       recordID: string;
     };
 
-async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
+async function addToAirtable(result: ReceiptResult, id: string, env: Env): Promise<Result> {
   const baseURL = "https://api.airtable.com";
   const basePath = env.AIRTABLE_BASE_PATH;
   const { receipt } = result;
@@ -169,6 +176,9 @@ async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
     return { error: `No rate found for ${receipt.dateYYYYMMDD}` };
   }
 
+  const uploadsBase = env.UPLOADS_URL.replace(/\/$/, "");
+  const receiptUrl = `${uploadsBase}/${id}/${receipt.invoiceOrReceiptFilename}`;
+
   // create entry
   // https://airtable.com/appUQFzJEsSST1Nkt/api/docs#curl/table:receipt%20log:create
   const createRequest = {
@@ -177,9 +187,10 @@ async function addToAirtable(result: ReceiptResult, env: Env): Promise<Result> {
         fields: {
           "Short Description": receipt.nameOfCompany,
           Date: [rate.id],
-          [receipt.currency]: receipt.totalAmount.replace(/[^0-9.]/g, ''),
+          [receipt.currency]: receipt.totalAmount.replace(/[^0-9.]/g, ""),
           Category: receipt.category,
-	  Notes: receipt.lineItems.map(i => i.nameOfProduct).join("\n"),
+          Notes: receipt.lineItems.map((i) => i.nameOfProduct).join("\n"),
+          "Receipt Photo": [{ url: receiptUrl }],
         },
       },
     ],
