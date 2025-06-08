@@ -128,7 +128,6 @@ export default {
     }
     const sender = { name: "Receipter", addr: env.EMAIL_ADDRESS };
     reply.setSender(sender);
-    reply.setSubject(`Re: ${email.subject ?? "recent email"}`);
 
     const r = result.receipt;
     const textLines: string[] = [
@@ -145,10 +144,14 @@ export default {
       const url = `https://airtable.com/${baseID}/${airtableResult.recordID}`;
 
       resultHTML = `<a href=${url}>${url}</a>`;
+
+      reply.setSubject(`Re: ${email.subject ?? "recent receipt"}`);
     } else if ("error" in airtableResult) {
       resultHTML = `<pre style'color: red'>${airtableResult.error}</pre>`;
+      reply.setSubject(`RECEIPT ERROR: ${email.subject}`);
     } else {
       resultHTML = "<span style'color: red'>something is wrong</span>";
+      reply.setSubject(`RECEIPT ERROR: ${email.subject}`);
     }
 
     const html: string = `
