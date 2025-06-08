@@ -65,13 +65,8 @@ export default {
     for (const attachment of email.attachments) {
       const data = `data:${attachment.mimeType};base64,${attachment.content}`;
 
-      const bytes = Uint8Array.from(
-        atob(attachment.content as string),
-        (c) => c.charCodeAt(0)
-      );
-      attachmentUploads.push(
-        env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, bytes)
-      );
+      const bytes = Uint8Array.from(atob(attachment.content as string), (c) => c.charCodeAt(0));
+      attachmentUploads.push(env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, bytes));
 
       attachments.push({
         type: "input_file",
@@ -110,8 +105,7 @@ export default {
     const result = response.output_parsed;
 
     if (!result) {
-      console.error("Empty openai response. TODO: use workflow to retry?");
-      return;
+      throw new Error("Empty openai response.");
     }
     console.log(result);
     if (!result.isReceipt) {
@@ -119,8 +113,7 @@ export default {
       return;
     }
     if (!result.receipt) {
-      console.warn("Somehow isReceipt is false but receipt is null?");
-      return;
+      throw new Error("Somehow isReceipt is false but receipt is null?");
     }
 
     const airtableResult = await addToAirtable(result, id, env).catch((e) => {
@@ -138,16 +131,41 @@ export default {
     reply.setSubject(`Re: ${email.subject ?? "recent email"}`);
 
     const r = result.receipt;
-    const lines: string[] = [
+    const textLines: string[] = [
       `Receipt for: ${r.nameOfCompany} (${r.dateYYYYMMDD})`,
       `Total: ${r.totalAmount} ${r.currency}`,
       ...r.lineItems.map((item) => `${item.nameOfProduct}: ${item.amount} x${item.quantity}`),
       `Airtable result: ${JSON.stringify(airtableResult)}`,
     ];
 
+    let resultHTML: string;
+    if ("recordID" in airtableResult) {
+      const paths = env.AIRTABLE_BASE_PATH.split("/");
+      const baseID = paths[paths.length - 1];
+      const url = `https://airtable.com/${baseID}/${airtableResult.recordID}`;
+
+      resultHTML = `<a href=${url}>${url}</a>`;
+    } else if ("error" in airtableResult) {
+      resultHTML = `<pre style'color: red'>${airtableResult.error}</pre>`;
+    } else {
+      resultHTML = "<span style'color: red'>something is wrong</span>";
+    }
+
+    const html: string = `
+      <h1>${r.nameOfCompany} (${r.dateYYYYMMDD})</h1>
+
+      TODO: table of line items
+
+      ${resultHTML}
+    `;
+
     reply.addMessage({
       contentType: "text/plain",
-      data: lines.join("\n\n"),
+      data: textLines.join("\n\n"),
+    });
+    reply.addMessage({
+      contentType: "text/html",
+      data: html,
     });
 
     await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
@@ -176,9 +194,8 @@ async function addToAirtable(result: ReceiptResult, id: string, env: Env): Promi
   // fetch exchange rate for date
   const ratesURL = new URL(baseURL);
   ratesURL.pathname = `${basePath}/Exchange Rate`;
-  ratesURL.searchParams.append("maxRecords", "30");
-  ratesURL.searchParams.append("sort[0][field]", "Date");
-  ratesURL.searchParams.append("sort[0][direction]", "desc");
+  ratesURL.searchParams.append("maxRecords", "1");
+  ratesURL.searchParams.append("filterByFormula", `{Date} = "${receipt.dateYYYYMMDD}"`);
   const ratesRaw = await fetch(ratesURL, { method: "GET", headers: { authorization } }).then((x) => x.json());
   const rates = ExchangeRates.parse(ratesRaw);
   const rate = rates.records.find((x) => x.fields.Date === receipt.dateYYYYMMDD);
@@ -197,9 +214,7 @@ async function addToAirtable(result: ReceiptResult, id: string, env: Env): Promi
         fields: {
           "Short Description": receipt.nameOfCompany,
           Date: [rate.id],
-          [receipt.currency]: parseFloat(
-            receipt.totalAmount.replace(/[^0-9.]/g, "")
-          ),
+          [receipt.currency]: parseFloat(receipt.totalAmount.replace(/[^0-9.]/g, "")),
           Category: receipt.category,
           Notes: receipt.lineItems.map((i) => i.nameOfProduct).join("\n"),
           "Receipt Photo": [{ url: receiptUrl }],
