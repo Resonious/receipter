@@ -12,7 +12,7 @@ const Classification = z.object({
     nameOfCompany: z.string(),
     totalAmount: z.string(),
     currency: z.enum(["USD", "JPY", "unknown"]),
-    invoiceOrReceiptFilename: z.string(),
+    invoiceOrReceiptFullAttachmentFileName: z.string(),
     category: z.enum(["Travel", "Equipment", "Services", "SAAS"]),
     lineItems: z.array(
       z.object({
@@ -65,7 +65,13 @@ export default {
     for (const attachment of email.attachments) {
       const data = `data:${attachment.mimeType};base64,${attachment.content}`;
 
-      attachmentUploads.push(env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, attachment.content));
+      const bytes = Uint8Array.from(
+        atob(attachment.content as string),
+        (c) => c.charCodeAt(0)
+      );
+      attachmentUploads.push(
+        env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, bytes)
+      );
 
       attachments.push({
         type: "input_file",
@@ -88,6 +94,10 @@ export default {
             {
               type: "input_text",
               text: emailBody,
+            },
+            {
+              type: "input_text",
+              text: `Attachments: ${attachments.map((a) => a.filename).join(", ")}`,
             },
           ],
         },
@@ -177,7 +187,7 @@ async function addToAirtable(result: ReceiptResult, id: string, env: Env): Promi
   }
 
   const uploadsBase = env.UPLOADS_URL.replace(/\/$/, "");
-  const receiptUrl = `${uploadsBase}/${id}/${receipt.invoiceOrReceiptFilename}`;
+  const receiptUrl = `${uploadsBase}/${id}/${receipt.invoiceOrReceiptFullAttachmentFileName}`;
 
   // create entry
   // https://airtable.com/appUQFzJEsSST1Nkt/api/docs#curl/table:receipt%20log:create
@@ -187,7 +197,9 @@ async function addToAirtable(result: ReceiptResult, id: string, env: Env): Promi
         fields: {
           "Short Description": receipt.nameOfCompany,
           Date: [rate.id],
-          [receipt.currency]: receipt.totalAmount.replace(/[^0-9.]/g, ""),
+          [receipt.currency]: parseFloat(
+            receipt.totalAmount.replace(/[^0-9.]/g, "")
+          ),
           Category: receipt.category,
           Notes: receipt.lineItems.map((i) => i.nameOfProduct).join("\n"),
           "Receipt Photo": [{ url: receiptUrl }],
