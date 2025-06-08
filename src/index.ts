@@ -110,6 +110,48 @@ export default {
     console.log(result);
     if (!result.isReceipt) {
       console.warn("Not a receipt. Carry on.");
+
+      // Send reply explaining that this was not detected as a receipt
+      const reply = createMimeMessage();
+      const messageId = message.headers.get("Message-ID");
+      if (messageId) {
+        reply.setHeader("In-Reply-To", messageId);
+      }
+      const sender = { name: "Receipter", addr: env.EMAIL_ADDRESS };
+      reply.setSender(sender);
+
+      const notReceiptText = [
+        "This email was not detected as a receipt.",
+        "If this is a receipt, please ensure:",
+        "• The email contains clear receipt information",
+        "• Receipt attachments are included (PDF, images, etc.)",
+        "• Company name and amount are clearly visible",
+        "",
+        "No action has been taken.",
+      ].join("\n");
+
+      const notReceiptHTML = `
+        <h2>Receipt Not Detected</h2>
+        <p>This email was not detected as a receipt.</p>
+        <p>If this is a receipt, please ensure:</p>
+        <ul>
+          <li>The email contains clear receipt information</li>
+          <li>Receipt attachments are included (PDF, images, etc.)</li>
+          <li>Company name and amount are clearly visible</li>
+        </ul>
+        <p><strong>No action has been taken.</strong></p>
+      `;
+
+      reply.addMessage({
+        contentType: "text/plain",
+        data: notReceiptText,
+      });
+      reply.addMessage({
+        contentType: "text/html",
+        data: notReceiptHTML,
+      });
+
+      await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
       return;
     }
     if (!result.receipt) {
