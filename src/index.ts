@@ -154,7 +154,36 @@ export default {
     const html: string = `
       <h1>${r.nameOfCompany} (${r.dateYYYYMMDD})</h1>
 
-      TODO: table of line items
+      <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+        <thead>
+          <tr style="background-color: #f5f5f5;">
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Product</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Amount</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${r.lineItems
+            .map(
+              (item) => `
+            <tr>
+              <td style="border: 1px solid #ddd; padding: 8px;">${item.nameOfProduct}</td>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${item.amount} ${r.currency}</td>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${item.quantity}</td>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${(parseFloat(item.amount) * item.quantity).toFixed(2)} ${r.currency}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+        <tfoot>
+          <tr style="background-color: #f9f9f9; font-weight: bold;">
+            <td colspan="3" style="border: 1px solid #ddd; padding: 8px; text-align: right;">Total:</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${r.totalAmount} ${r.currency}</td>
+          </tr>
+        </tfoot>
+      </table>
 
       ${resultHTML}
     `;
