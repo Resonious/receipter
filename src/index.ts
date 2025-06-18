@@ -59,6 +59,12 @@ export default {
       return;
     }
 
+    console.log({
+      message: "Reading email",
+      from: email.from,
+      subject: email.subject,
+    });
+
     const attachmentUploads = [];
 
     const attachments: Array<{ type: "input_file"; filename: string; file_data: string }> = [];
