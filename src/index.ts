@@ -69,7 +69,13 @@ export default {
 
     const attachments: Array<{ type: "input_file"; filename: string; file_data: string }> = [];
     for (const attachment of email.attachments) {
-      const data = `data:${attachment.mimeType};base64,${attachment.content}`;
+      console.log("Attachment", attachment.filename ?? "null");
+      let mimeType = attachment.mimeType;
+      if (attachment.mimeType === "application/octet-stream" && attachment.filename?.endsWith(".pdf")) {
+	console.warn("Replacing application/octet-stream with application/pdf");
+	mimeType = "application/pdf";
+      }
+      const data = `data:${mimeType};base64,${attachment.content}`;
 
       const bytes = Uint8Array.from(atob(attachment.content as string), (c) => c.charCodeAt(0));
       attachmentUploads.push(env.RECEIPTS.put(`${id}/${attachment.filename ?? "attachment"}`, bytes));
