@@ -254,8 +254,12 @@ export default {
       data: html,
     });
 
-    await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
-    await Promise.all(attachmentUploads);
+    try {
+      await message.reply(new EmailMessage(sender.addr, message.from, reply.asRaw()));
+      await Promise.all(attachmentUploads);
+    } catch (e) {
+      console.error(e);
+    }
   },
 } satisfies ExportedHandler<Env>;
 
