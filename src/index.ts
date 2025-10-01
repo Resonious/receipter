@@ -88,7 +88,7 @@ export default {
     }
 
     const response = await openai.responses.parse({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       input: [
         {
           role: "system",
